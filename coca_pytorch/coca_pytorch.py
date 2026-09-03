@@ -478,8 +478,6 @@ class CoCa(nn.Module):
         return_loss=False,
         return_embeddings=False
     ):
-        batch, device = text.shape[0], text.device
-
         if return_loss and not exists(labels):
             text, labels = text[:, :-1], text[:, 1:]
 
@@ -529,7 +527,10 @@ class CoCa(nn.Module):
 
         sim = einsum('i d, j d -> i j', text_latents, image_latents)
         sim = sim * self.temperature.exp()
-        contrastive_labels = torch.arange(batch, device=device)
+        # In distributed training the gathered latents contain every rank's
+        # samples, so the target indices must cover the global batch rather
+        # than only this rank's local batch.
+        contrastive_labels = torch.arange(text_latents.shape[0], device=text_latents.device)
 
         contrastive_loss = (ce(sim, contrastive_labels) + ce(sim.t(), contrastive_labels)) * 0.5
         contrastive_loss = contrastive_loss * self.contrastive_loss_weight
